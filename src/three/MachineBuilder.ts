@@ -356,13 +356,15 @@ export class MachineBuilder {
       [CAV.x1 - CAV.x0, CAV.y0, CAV.z1 - CAV.z0, (CAV.x0 + CAV.x1) / 2, CAV.y0 / 2, (CAV.z0 + CAV.z1) / 2], // 腔体下方
       // 腔体上方：只保留出货口前方的一段（关闭取物口上沿的柜体）。
       // 出货口正上方的楼层必须留空，洞口才能从玻璃柜一路贯通到取物腔。
+      // 前立面比洞口前沿再往洞口里让 5mm：若正停在 z = hole.z1，
+      // 它会和柜内地板「右前窄条」的洞口边缘面共面同向，洞口前沿整条闪。
       [
         CAV.x1 - CAV.x0,
         BODY_TOP - CAV.y1,
-        CAV.z1 - CHUTE_OPENING.z1,
+        CAV.z1 - (CHUTE_OPENING.z1 - 0.005),
         (CAV.x0 + CAV.x1) / 2,
         (CAV.y1 + BODY_TOP) / 2,
-        (CHUTE_OPENING.z1 + CAV.z1) / 2,
+        (CHUTE_OPENING.z1 - 0.005 + CAV.z1) / 2,
       ],
     ]
     for (const [w, h, d, x, y, z] of parts) {
@@ -511,7 +513,7 @@ export class MachineBuilder {
 
   // ---------- 玻璃柜内地面（留出货口缺口） ----------
   private buildPlayFloor(parent: THREE.Group, statics: StaticBoxSpec[], animated: MachineBuildResult['animated']) {
-    const th = 0.05
+    const th = M.floorTh
     const topY = M.floorY
     const cy = topY - th / 2
 
@@ -588,7 +590,11 @@ export class MachineBuilder {
     // 洞口边缘面共面同向（x = hole.x0 / z = hole.z0 / z = hole.z1），
     // 旋转视角时这两层面会在洞口四周整圈闪动（z-fighting）。
     const GAP = 0.003
-    const lipA = box(0.03, lipH, M.halfD - innerZ, innerX - 0.015 - GAP, M.floorY + lipH / 2, (innerZ + M.halfD) / 2, lipMat)
+    // 后侧挡边的后端越过洞口后沿 1cm（伸到 z = innerZ - 0.01）：
+    // 若后端面正好停在 z = innerZ，它会和玻璃柜下框左块的端面共面同向，
+    // 从机器背面看洞口后沿那条金边就会闪。
+    const lipABack = innerZ - 0.01
+    const lipA = box(0.03, lipH, M.halfD - lipABack, innerX - 0.015 - GAP, M.floorY + lipH / 2, (lipABack + M.halfD) / 2, lipMat)
     const lipB = box(M.halfW - innerX, lipH, 0.03, (innerX + M.halfW) / 2, M.floorY + lipH / 2, innerZ - 0.015 - GAP, lipMat)
     // 前侧挡边（洞口靠玻璃的一边），防止物品被弹起后从正面滚出
     const lipC = box(M.chute.size, lipH, 0.03, M.chute.x, M.floorY + lipH / 2, maxZ + 0.015 + GAP, lipMat)
@@ -600,8 +606,8 @@ export class MachineBuilder {
     animated.push({ material: lipMat, base: 0.55, speed: 2.2, phase: 2.4 })
     statics.push(
       {
-        center: [innerX - 0.015 - GAP, M.floorY + lipH / 2, (innerZ + M.halfD) / 2],
-        half: [0.015, lipH / 2, (M.halfD - innerZ) / 2],
+        center: [innerX - 0.015 - GAP, M.floorY + lipH / 2, (lipABack + M.halfD) / 2],
+        half: [0.015, lipH / 2, (M.halfD - lipABack) / 2],
         friction: 0.4,
       },
       {
@@ -625,10 +631,14 @@ export class MachineBuilder {
     const minZ = M.chute.z - s
     const maxZ = M.chute.z + s
     const bottom = M.chuteFloorY
-    // 滑道壁顶端收到玻璃柜下框（bottomFrame）底面的同一高度，
-    // 比柜顶压边顶面（floorY）低 5mm —— 壁顶被压边整个盖住，
-    // 不会与压边 / 柜内地板在同一平面抢深度而闪烁。
-    const height = M.floorY - 0.005 - bottom
+    // 滑道壁顶端收到柜内地板的下沿（floorY - floorTh = 0.73）。
+    // 左/后壁的内侧面与地板的洞口边缘面同处 x = hole.x0 / z = hole.z0 平面，
+    // 之前壁顶一直顶到 0.775，与地板（0.73~0.78）在 Y 上重叠 45mm，
+    // 两层同向共面的大面在洞口内壁反复抢深度 —— 就是洞口周围那片闪动。
+    // 收到地板下沿后，两个面只在 y = 0.73 一条线上相接，零面积重叠，
+    // 内壁在视觉上反而连成一整片（地板侧面 → 滑道壁侧面，同一平面）。
+    const wallTop = M.floorY - M.floorTh
+    const height = wallTop - bottom
     const cy = bottom + height / 2
     const t = 0.03
 
@@ -742,10 +752,14 @@ export class MachineBuilder {
 
     // 下金属框：同样是挖了洞的板件，给出货口留出贯通的通道，
     // 物品下落时从洞口一路可见，直到取物腔底部。
+    // 底面整体抬到地板顶面之上 1mm（0.781，正好坐在柜顶压边顶面上）：
+    // 它的洞口边缘面（x = hole.x0 / z = hole.z0 / z = hole.z1）与地板的
+    // 洞口边缘面同处一平面，原来底面沉到 0.775、与地板有 5mm 的重叠，
+    // 洞口四周就挂着一圈 5mm 高的细闪线。抬起来后 Y 上零重叠。
     const bottomFrame = plateWithHole(
       { x0: -M.halfW - 0.05, x1: M.halfW + 0.05, z0: -M.halfD - 0.05, z1: M.halfD + 0.05 },
       { x0: CHUTE_OPENING.x0, x1: CHUTE_OPENING.x1, z0: CHUTE_OPENING.z0, z1: CHUTE_OPENING.z1 },
-      M.floorY + 0.02,
+      M.floorY + 0.026,
       0.05,
       this.mats.frame,
     )

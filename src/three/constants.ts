@@ -213,6 +213,12 @@ export const M = {
   groundY: 0,
   /** 玻璃柜内部地面高度，也是物品落地高度 */
   floorY: FLOOR_Y,
+  /**
+   * 柜内地板板厚。地板下沿 = floorY - floorTh，
+   * 出货滑道壁的顶端必须收到这个高度：壁的内侧面与地板洞口边缘面
+   * 同处一个竖直平面，若在 Y 上有重叠，旋转视角时洞口内壁整片闪动。
+   */
+  floorTh: 0.05,
   /** 玻璃柜顶面（橱窗高度 = glassTop - floorY，物品堆放空间） */
   glassTop: GLASS_TOP,
   /** X/Z 导轨高度 */
