@@ -355,6 +355,10 @@ export class MachineBuilder {
     const W = M.cabinetW + 0.06
     const D = M.cabinetD + 0.06
     const H = M.floorY
+    // 柜体结构件的顶面收进柜顶压边（capPlate）厚度之内。
+    // 若与压边顶面（= floorY）完全共面，旋转视角时两层材质会来回争夺深度，
+    // 橱窗底部四周就会持续闪动（z-fighting）。
+    const BODY_TOP = M.floorY - 0.01
     const zCenter = 0
 
     /**
@@ -365,18 +369,18 @@ export class MachineBuilder {
 
     const parts: [number, number, number, number, number, number][] = [
       // [w, h, d, x, y, z]
-      [W, H, CAV.z0 + D / 2, 0, H / 2, (-D / 2 + CAV.z0) / 2], // 后段整块
-      [CAV.x0 + W / 2, H, CAV.z1 - CAV.z0, (-W / 2 + CAV.x0) / 2, H / 2, (CAV.z0 + CAV.z1) / 2], // 左前块
-      [W / 2 - CAV.x1, H, CAV.z1 - CAV.z0, (CAV.x1 + W / 2) / 2, H / 2, (CAV.z0 + CAV.z1) / 2], // 右前柱
+      [W, BODY_TOP, CAV.z0 + D / 2, 0, BODY_TOP / 2, (-D / 2 + CAV.z0) / 2], // 后段整块
+      [CAV.x0 + W / 2, BODY_TOP, CAV.z1 - CAV.z0, (-W / 2 + CAV.x0) / 2, BODY_TOP / 2, (CAV.z0 + CAV.z1) / 2], // 左前块
+      [W / 2 - CAV.x1, BODY_TOP, CAV.z1 - CAV.z0, (CAV.x1 + W / 2) / 2, BODY_TOP / 2, (CAV.z0 + CAV.z1) / 2], // 右前柱
       [CAV.x1 - CAV.x0, CAV.y0, CAV.z1 - CAV.z0, (CAV.x0 + CAV.x1) / 2, CAV.y0 / 2, (CAV.z0 + CAV.z1) / 2], // 腔体下方
       // 腔体上方：只保留出货口前方的一段（关闭取物口上沿的柜体）。
       // 出货口正上方的楼层必须留空，洞口才能从玻璃柜一路贯通到取物腔。
       [
         CAV.x1 - CAV.x0,
-        H - CAV.y1,
+        BODY_TOP - CAV.y1,
         CAV.z1 - CHUTE_OPENING.z1,
         (CAV.x0 + CAV.x1) / 2,
-        (CAV.y1 + H) / 2,
+        (CAV.y1 + BODY_TOP) / 2,
         (CHUTE_OPENING.z1 + CAV.z1) / 2,
       ],
     ]
@@ -636,7 +640,10 @@ export class MachineBuilder {
     const minZ = M.chute.z - s
     const maxZ = M.chute.z + s
     const bottom = M.chuteFloorY
-    const height = M.floorY - bottom
+    // 滑道壁顶端收到玻璃柜下框（bottomFrame）底面的同一高度，
+    // 比柜顶压边顶面（floorY）低 5mm —— 壁顶被压边整个盖住，
+    // 不会与压边 / 柜内地板在同一平面抢深度而闪烁。
+    const height = M.floorY - 0.005 - bottom
     const cy = bottom + height / 2
     const t = 0.03
 
@@ -704,8 +711,11 @@ export class MachineBuilder {
 
   // ---------- 玻璃柜 ----------
   private buildGlassBox(parent: THREE.Group) {
-    const h = M.glassTop - M.floorY
-    const cy = M.floorY + h / 2
+    // 立柱根部沉入柜顶压边（capPlate）之内 2cm，柱顶仍在玻璃柜顶面 ——
+    // 避免柱底圆面与压边顶面在同一平面闪烁。
+    const postBottom = M.floorY - 0.02
+    const h = M.glassTop - postBottom
+    const cy = (postBottom + M.glassTop) / 2
     const postR = 0.032
 
     // 四角立柱
