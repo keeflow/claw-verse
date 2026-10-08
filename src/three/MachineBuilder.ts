@@ -221,26 +221,6 @@ function uprightFrame(
   return g
 }
 
-/** 水平面上的空心矩形边框（用于出货口） */
-function flatFrame(
-  size: number,
-  bar: number,
-  thickness: number,
-  x: number,
-  y: number,
-  z: number,
-  material: THREE.Material,
-): THREE.Group {
-  const g = new THREE.Group()
-  g.position.set(x, y, z)
-  const hs = size / 2
-  g.add(box(size + bar * 2, thickness, bar, 0, 0, hs + bar / 2, material))
-  g.add(box(size + bar * 2, thickness, bar, 0, 0, -hs - bar / 2, material))
-  g.add(box(bar, thickness, size, -hs - bar / 2, 0, 0, material))
-  g.add(box(bar, thickness, size, hs + bar / 2, 0, 0, material))
-  return g
-}
-
 interface Rect {
   x0: number
   x1: number
@@ -319,12 +299,13 @@ export class MachineBuilder {
     parent.add(ground)
     this.disposables.push(ground.geometry)
 
-    // 机台底盘
+    // 机台底盘。顶面必须低于底座踢脚（skirt）的顶面，
+    // 否则两者的大面积顶面共面同向，旋转视角时整圈基座闪动。
     const plinth = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.55, 1.7, 0.06, 48),
+      new THREE.CylinderGeometry(1.55, 1.7, 0.055, 48),
       new THREE.MeshStandardMaterial({ color: 0x0a0e18, roughness: 0.7, metalness: 0.2 }),
     )
-    plinth.position.y = 0.03
+    plinth.position.y = 0.0275
     plinth.receiveShadow = true
     plinth.castShadow = true
     parent.add(plinth)
@@ -400,7 +381,9 @@ export class MachineBuilder {
     const capPlate = plateWithHole(
       { x0: -capHalfW, x1: capHalfW, z0: -capHalfD, z1: capHalfD },
       { x0: -M.halfW, x1: M.halfW, z0: -M.halfD, z1: M.halfD },
-      H - 0.025,
+      // 顶面比柜内地板高 1mm：压边与地板的外边缘共线，
+      // 若同高，旋转时玻璃柜四边的接缝会闪出细线。
+      H - 0.024,
       0.05,
       this.mats.frame,
     )
@@ -582,50 +565,52 @@ export class MachineBuilder {
     parent.add(trim)
     this.disposables.push(trim.geometry)
 
-    // 出货口视觉：洞口金边 + 坑壁暗面。
+    // 出货口视觉：坑壁暗面 + 三条金色挡边（呼吸灯）。
     // 注意这里不能再铺任何「假洞平面」——洞口下方是真实的出货滑道，
     // 铺平面会把正在下落的物品从上方视线里整个挡住，玩家就看不到掉落效果了。
     // 深度感由滑道内壁（暗色）+ 坑底缓冲垫（近黑）自然形成。
-    const rimMat = new THREE.MeshStandardMaterial({
-      color: THEME.gold,
-      emissive: new THREE.Color(THEME.gold),
-      emissiveIntensity: 1.1,
-      roughness: 0.3,
-      metalness: 0.85,
-    })
-    this.disposables.push(rimMat)
-    const rim = flatFrame(M.chute.size, 0.032, 0.034, M.chute.x, M.floorY - 0.012, M.chute.z, rimMat)
-    parent.add(rim)
-    // 洞口金边做成呼吸灯：引导玩家把爪子开到出货口上方
-    animated.push({ material: rimMat, base: 1.1, speed: 2.2, phase: 2.4 })
 
-    // 出货口内侧的三条挡边：散落的物品不会自己滚进去，爪子从上方投放则不受影响
+    // 出货口内侧的三条挡边：散落的物品不会自己滚进去，爪子从上方投放则不受影响。
+    // 材质是独立实例并带自发光呼吸，充当「洞口金边」引导灯。
     const maxZ = M.chute.z + M.chute.size / 2
     const lipH = 0.09
-    const lipMat = this.mats.gold
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: THEME.gold,
+      emissive: new THREE.Color(THEME.gold),
+      emissiveIntensity: 0.55,
+      roughness: 0.28,
+      metalness: 0.9,
+    })
+    this.disposables.push(lipMat)
     const innerX = chuteMinX
     const innerZ = chuteMinZ
-    const lipA = box(0.03, lipH, M.halfD - innerZ, innerX - 0.015, M.floorY + lipH / 2, (innerZ + M.halfD) / 2, lipMat)
-    const lipB = box(M.halfW - innerX, lipH, 0.03, (innerX + M.halfW) / 2, M.floorY + lipH / 2, innerZ - 0.015, lipMat)
+    // 挡边整体向外让 3mm：其内侧面若与玻璃柜下框（bottomFrame）的
+    // 洞口边缘面共面同向（x = hole.x0 / z = hole.z0 / z = hole.z1），
+    // 旋转视角时这两层面会在洞口四周整圈闪动（z-fighting）。
+    const GAP = 0.003
+    const lipA = box(0.03, lipH, M.halfD - innerZ, innerX - 0.015 - GAP, M.floorY + lipH / 2, (innerZ + M.halfD) / 2, lipMat)
+    const lipB = box(M.halfW - innerX, lipH, 0.03, (innerX + M.halfW) / 2, M.floorY + lipH / 2, innerZ - 0.015 - GAP, lipMat)
     // 前侧挡边（洞口靠玻璃的一边），防止物品被弹起后从正面滚出
-    const lipC = box(M.chute.size, lipH, 0.03, M.chute.x, M.floorY + lipH / 2, maxZ + 0.015, lipMat)
+    const lipC = box(M.chute.size, lipH, 0.03, M.chute.x, M.floorY + lipH / 2, maxZ + 0.015 + GAP, lipMat)
     lipA.castShadow = false
     lipB.castShadow = false
     lipC.castShadow = false
     parent.add(lipA, lipB, lipC)
+    // 洞口金边呼吸灯：引导玩家把爪子开到出货口上方
+    animated.push({ material: lipMat, base: 0.55, speed: 2.2, phase: 2.4 })
     statics.push(
       {
-        center: [innerX - 0.015, M.floorY + lipH / 2, (innerZ + M.halfD) / 2],
+        center: [innerX - 0.015 - GAP, M.floorY + lipH / 2, (innerZ + M.halfD) / 2],
         half: [0.015, lipH / 2, (M.halfD - innerZ) / 2],
         friction: 0.4,
       },
       {
-        center: [(innerX + M.halfW) / 2, M.floorY + lipH / 2, innerZ - 0.015],
+        center: [(innerX + M.halfW) / 2, M.floorY + lipH / 2, innerZ - 0.015 - GAP],
         half: [(M.halfW - innerX) / 2, lipH / 2, 0.015],
         friction: 0.4,
       },
       {
-        center: [M.chute.x, M.floorY + lipH / 2, maxZ + 0.015],
+        center: [M.chute.x, M.floorY + lipH / 2, maxZ + 0.015 + GAP],
         half: [M.chute.size / 2, lipH / 2, 0.015],
         friction: 0.4,
       },
