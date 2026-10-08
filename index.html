@@ -2,7 +2,22 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      移动端视口：
+      · viewport-fit=cover 才能取到刘海 / 圆角屏的安全区（配合 style.css 里的 env() 变量）
+      · user-scalable=no + maximum-scale=1 关掉整页缩放：3D 画布自己处理双指缩放，
+        页面级别的缩放只会让操作面板跑位、误触放大
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <!-- 添加到主屏后全屏运行，隐藏地址栏，接近原生游戏体验 -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#05070d" />
     <title>娃娃乐园 · 3D 抓娃娃机</title>
   </head>
   <body>

@@ -17,6 +17,12 @@
     height: 100%;
   }
 
+  html {
+    /* iOS 横竖屏切换时不要自动放大字号 */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     margin: 0;
     font-family: var(--font-sans);
@@ -24,10 +30,29 @@
     text-rendering: optimizeLegibility;
     background: #f6f7fb;
     color: #1a1f2b;
+    /* 移动端：禁止整页橡皮筋与下拉刷新 —— 玩的时候手指往下滑不会把页面拽下去 */
+    overscroll-behavior: none;
+    /* manipulation：保留滚动与双指缩放（画布自己接管），但干掉双击缩放 */
+    touch-action: manipulation;
   }
 
   * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 触屏设备：长按不弹出「拷贝 / 打开链接」菜单，控件文字不可选中 */
+  @media (pointer: coarse) {
+    html {
+      -webkit-touch-callout: none;
+    }
+
+    button,
+    label,
+    a,
+    [role='switch'] {
+      user-select: none;
+      -webkit-user-select: none;
+    }
   }
 }
 
@@ -40,6 +65,39 @@
       0 18px 46px -20px rgba(0, 0, 0, 0.9),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(14px) saturate(1.2);
+  }
+
+  /*
+   * 安全区内边距。
+   * 单独成类而不是「pb-3 + safe-b」两件套：两个 class 都能改 padding-bottom，
+   * 谁覆盖谁取决于打包顺序，用 calc 一步算完最稳。
+   */
+  .pb-safe {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pb-safe-lg {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pt-safe {
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  .px-safe {
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  }
+
+  /* 固定贴在底部 / 顶部的浮层（toast、抽屉）也要让开安全区 */
+  .bottom-safe {
+    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 3D 画布与虚拟摇杆：把浏览器的手势完全交给自己处理 */
+  .game-surface {
+    touch-action: none;
+    -webkit-touch-callout: none;
   }
 
   .neon-text {
@@ -76,6 +134,7 @@
   .no-select {
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 }
 

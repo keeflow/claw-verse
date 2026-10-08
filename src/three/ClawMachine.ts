@@ -107,6 +107,15 @@ export class ClawMachine {
     this.callbacks = callbacks
   }
 
+  /**
+   * 触屏设备（手机 / 平板）的 GPU 预算比桌面紧张：
+   * 用它来决定采样倍率与阴影贴图分辨率，换取更稳的帧率。
+   */
+  private readonly touchDevice =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches
+
   // ------------------------------------------------------------------
   // 初始化
   // ------------------------------------------------------------------
@@ -132,7 +141,8 @@ export class ClawMachine {
     canvas.style.touchAction = 'none'
     this.container.appendChild(canvas)
 
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    // 手机多数是 DPR 3 的屏幕，封顶 1.75 能省下大量像素填充，画质肉眼几乎无差别
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.touchDevice ? 1.75 : 2))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -247,7 +257,8 @@ export class ClawMachine {
     const key = new THREE.DirectionalLight(0xfff6e8, 2.1)
     key.position.set(3.4, 5.2, 3.2)
     key.castShadow = true
-    key.shadow.mapSize.set(1536, 1536)
+    const shadowRes = this.touchDevice ? 1024 : 1536
+    key.shadow.mapSize.set(shadowRes, shadowRes)
     key.shadow.camera.near = 1
     key.shadow.camera.far = 14
     key.shadow.camera.left = -2.4

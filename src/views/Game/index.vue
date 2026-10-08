@@ -9,6 +9,7 @@ import {
   matchPreset,
   type ViewPresetName,
 } from '@/three/CameraController'
+import { useIsTouch, vibrate } from '@/utils/device'
 import GameStatus from '@/components/GameStatus.vue'
 import GameController from '@/components/GameController.vue'
 
@@ -33,6 +34,11 @@ const keyboardDir = ref({ x: 0, z: 0 })
 /** 取物腔里等待取走的奖品数量 */
 const chuteCount = ref(0)
 let noteTimer = 0
+
+/** 移动端：紧凑 HUD 是否展开成完整战况卡 */
+const hudOpen = ref(false)
+/** 触屏文案与震动反馈 */
+const isTouch = useIsTouch()
 
 /** 360° 环视：当前视角与自动旋转状态 */
 const view = ref({ azimuth: 0, polar: 1.3, distance: 5.2 })
@@ -74,6 +80,7 @@ onMounted(async () => {
       )
       bonus.value = `🎉 意外收获「${prize.itemName}」掉进了取物口！`
       remainingItems.value = instance.remainingItemCount
+      if (isTouch.value) vibrate([0, 26, 40, 26])
       window.clearTimeout(bonusTimer)
       bonusTimer = window.setTimeout(() => {
         bonus.value = ''
@@ -86,6 +93,7 @@ onMounted(async () => {
       remainingItems.value = instance.remainingItemCount
       // 成功的庆祝交给 3D 场景（烟花 + 音乐），这里只做轻量文字反馈
       if (outcome.success) {
+        if (isTouch.value) vibrate([0, 24, 60, 34])
         successBanner.value = outcome.itemName
         window.clearTimeout(successTimer)
         successTimer = window.setTimeout(() => {
@@ -156,6 +164,8 @@ async function handleGrab() {
     warning.value = '抓取次数已经用完，可以点击「补充次数」继续'
     return
   }
+  hudOpen.value = false
+  if (isTouch.value) vibrate(14)
   const outcome = await m.grab()
   if (!outcome) {
     // 流程被中断时把次数还回去
@@ -171,6 +181,7 @@ function onDirection(dir: { x: number; z: number }) {
 function refill() {
   store.refillAttempts()
   store.setGrabbing(false)
+  showNote('已补充抓取次数，继续加油 🎯')
 }
 
 /** 清空取物口：把落进取物腔的奖品全部取走 */
@@ -199,6 +210,11 @@ function viewPreset(name: ViewPresetName) {
   machine.value?.viewPreset(name)
 }
 
+/** 手机上的「特写 / 全景」切换：窄屏时机器占满宽度，贴脸看更容易对位 */
+function toggleCloseup() {
+  viewPreset(activePreset.value === 'close' ? 'front' : 'close')
+}
+
 function toggleAutoRotate() {
   machine.value?.toggleAutoRotate()
   autoRotate.value = machine.value?.isAutoRotating ?? false
@@ -214,106 +230,250 @@ function onKeydownRefill(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="relative h-full w-full overflow-hidden bg-[#05070d]">
-    <!-- 3D 画布 -->
-    <div ref="canvasHost" class="absolute inset-0"></div>
+  <!--
+    注意：这一层不能加 touch-action:none —— 展开的战况卡要靠手指滚动，
+    祖先一旦禁用手势，下层所有元素都滚不动了。触屏手势只在画布与摇杆上接管。
+  -->
+  <div class="relative h-full w-full overflow-hidden bg-[#05070d]" @contextmenu.prevent>
+    <!-- 3D 画布：单指拖动环视、双指捏合缩放；点画面就收起展开的战况卡 -->
+    <div
+      ref="canvasHost"
+      class="game-surface absolute inset-0"
+      @pointerdown="hudOpen = false"
+    ></div>
 
-    <!-- 顶部栏 -->
-    <header class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-4">
-      <div class="pointer-events-auto flex items-center gap-3">
-        <div
-          class="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/25 bg-slate-900/70 text-[18px] shadow-[0_0_22px_-6px_rgba(56,225,255,0.6)]"
-        >
-          🕹️
-        </div>
-        <div class="leading-tight">
-          <h1 class="neon-text text-[17px] font-bold tracking-wide text-slate-100">娃娃乐园</h1>
-          <p class="text-[11px] tracking-[0.18em] text-slate-500">3D 抓娃娃机 · 电玩城</p>
-        </div>
-      </div>
-
-      <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-        <!-- 快捷视角：一键转到各面 -->
-        <div class="glass-panel hidden items-center gap-0.5 rounded-xl p-1 lg:flex">
-          <button
-            v-for="name in presetNames"
-            :key="name"
-            class="rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition"
-            :class="
-              activePreset === name
-                ? 'bg-cyan-400/85 text-slate-950 shadow-[0_0_16px_-2px_rgba(56,225,255,0.7)]'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            "
-            :title="`转到${VIEW_PRESET_LABEL[name]}视角`"
-            @click="viewPreset(name)"
+    <!-- 顶部浮层：标题栏 / 战况 / 提示条，整体走正常文档流，高度变化不会互相压字 -->
+    <div class="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-2 px-3 pt-safe sm:px-4">
+      <header class="pointer-events-none flex items-start justify-between gap-2">
+        <div class="pointer-events-auto flex items-center gap-2.5">
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/25 bg-slate-900/70 text-[16px] shadow-[0_0_22px_-6px_rgba(56,225,255,0.6)] sm:h-10 sm:w-10 sm:text-[18px]"
           >
-            {{ VIEW_PRESET_LABEL[name] }}
+            🕹️
+          </div>
+          <div class="leading-tight">
+            <h1 class="neon-text text-[15px] font-bold tracking-wide text-slate-100 sm:text-[17px]">
+              娃娃乐园
+            </h1>
+            <p class="hidden text-[11px] tracking-[0.18em] text-slate-500 sm:block">
+              3D 抓娃娃机 · 电玩城
+            </p>
+          </div>
+        </div>
+
+        <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <!-- 宽屏：快捷视角一键转到各面 -->
+          <div class="glass-panel hidden items-center gap-0.5 rounded-xl p-1 lg:flex">
+            <button
+              v-for="name in presetNames"
+              :key="name"
+              class="rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition"
+              :class="
+                activePreset === name
+                  ? 'bg-cyan-400/85 text-slate-950 shadow-[0_0_16px_-2px_rgba(56,225,255,0.7)]'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              "
+              :title="`转到${VIEW_PRESET_LABEL[name]}视角`"
+              @click="viewPreset(name)"
+            >
+              {{ VIEW_PRESET_LABEL[name] }}
+            </button>
+          </div>
+
+          <!-- 窄屏：特写 / 全景切换（竖屏时机器几乎占满宽度，贴脸看更好对位） -->
+          <button
+            class="glass-panel hud-btn lg:hidden"
+            :class="
+              activePreset === 'close'
+                ? 'border-cyan-300/45 text-cyan-200'
+                : 'text-slate-300'
+            "
+            :aria-pressed="activePreset === 'close'"
+            aria-label="切换特写视角"
+            :title="activePreset === 'close' ? '切回全景视角' : '切到机内特写视角'"
+            @click="toggleCloseup"
+          >
+            <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
+              <circle cx="9" cy="9" r="5.5" />
+              <path d="M13.2 13.2 17 17M9 6.6v4.8M6.6 9h4.8" stroke-linecap="round" />
+            </svg>
+            <span class="hidden sm:inline">特写</span>
+          </button>
+
+          <!-- 自动环绕 -->
+          <button
+            class="glass-panel hud-btn"
+            :class="
+              autoRotate
+                ? 'border-cyan-300/45 text-cyan-200 shadow-[0_0_18px_-6px_rgba(56,225,255,0.8)]'
+                : 'text-slate-300'
+            "
+            :aria-pressed="autoRotate"
+            aria-label="自动环绕"
+            @click="toggleAutoRotate"
+          >
+            <svg
+              viewBox="0 0 20 20"
+              class="h-4 w-4"
+              :class="autoRotate && 'animate-spin'"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            >
+              <path d="M16.4 8.4A6.6 6.6 0 0 0 4.6 6.2" />
+              <path d="M3.6 11.6a6.6 6.6 0 0 0 11.8 2.2" />
+              <path d="M4.6 2.6v3.6h3.6M15.4 17.4v-3.6h-3.6" />
+            </svg>
+            <span class="hidden sm:inline">自动旋转</span>
+          </button>
+
+          <button
+            class="glass-panel hud-btn"
+            aria-label="重置视角"
+            title="重置视角"
+            @click="resetView"
+          >
+            <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M4 10a6 6 0 1 0 1.8-4.3" stroke-linecap="round" />
+              <path d="M4 3.6V7h3.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="hidden sm:inline">重置视角</span>
+          </button>
+
+          <button
+            class="glass-panel hud-btn"
+            aria-label="设置"
+            title="设置"
+            @click="goSettings"
+          >
+            <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z" />
+              <path
+                d="M16.2 12.2a1.3 1.3 0 0 0 .26 1.43l.05.05a1.6 1.6 0 1 1-2.26 2.26l-.05-.05a1.3 1.3 0 0 0-1.43-.26 1.3 1.3 0 0 0-.79 1.19v.13a1.6 1.6 0 1 1-3.2 0v-.07a1.3 1.3 0 0 0-.85-1.19 1.3 1.3 0 0 0-1.43.26l-.05.05A1.6 1.6 0 1 1 4.19 13.7l.05-.05a1.3 1.3 0 0 0 .26-1.43 1.3 1.3 0 0 0-1.19-.79h-.13a1.6 1.6 0 1 1 0-3.2h.07a1.3 1.3 0 0 0 1.19-.85 1.3 1.3 0 0 0-.26-1.43l-.05-.05A1.6 1.6 0 1 1 6.4 3.64l.05.05a1.3 1.3 0 0 0 1.43.26h.06a1.3 1.3 0 0 0 .79-1.19v-.13a1.6 1.6 0 1 1 3.2 0v.07a1.3 1.3 0 0 0 .79 1.19 1.3 1.3 0 0 0 1.43-.26l.05-.05a1.6 1.6 0 1 1 2.26 2.26l-.05.05a1.3 1.3 0 0 0-.26 1.43v.06a1.3 1.3 0 0 0 1.19.79h.13a1.6 1.6 0 1 1 0 3.2h-.07a1.3 1.3 0 0 0-1.19.79Z"
+              />
+            </svg>
+            <span class="hidden sm:inline">设置</span>
           </button>
         </div>
+      </header>
 
-        <!-- 自动环绕 -->
+      <!-- 窄屏：一行紧凑战况，点一下展开完整面板 -->
+      <div class="pointer-events-auto flex lg:hidden">
         <button
-          class="glass-panel flex items-center gap-2 rounded-xl px-3.5 py-2 text-[12px] font-medium transition"
-          :class="
-            autoRotate
-              ? 'border-cyan-300/45 text-cyan-200 shadow-[0_0_18px_-6px_rgba(56,225,255,0.8)]'
-              : 'text-slate-300 hover:text-white'
-          "
-          :aria-pressed="autoRotate"
-          @click="toggleAutoRotate"
+          class="glass-panel flex h-9 items-center gap-2 rounded-full px-3.5 text-[11px] transition active:scale-[0.97]"
+          :aria-expanded="hudOpen"
+          @click="hudOpen = !hudOpen"
         >
+          <span class="flex items-center gap-1 text-slate-400">
+            剩余
+            <span
+              class="tabular text-[14px] font-bold"
+              :class="canContinue ? 'text-arcade-cyan' : 'text-rose-400'"
+            >
+              {{ store.remainingAttempts }}
+            </span>
+            <span class="tabular text-slate-500">/{{ store.attemptsPerGame }}</span>
+          </span>
+          <span class="h-3 w-px bg-white/10"></span>
+          <span class="flex items-center gap-1 text-slate-400">
+            机器内 <span class="tabular font-semibold text-slate-200">{{ remainingItems }}</span>
+          </span>
+          <span class="h-3 w-px bg-white/10"></span>
+          <span class="flex items-center gap-1 text-slate-400">
+            成功 <span class="tabular font-semibold text-emerald-300">{{ store.successCount }}</span>
+          </span>
           <svg
             viewBox="0 0 20 20"
-            class="h-4 w-4"
-            :class="autoRotate && 'animate-spin'"
+            class="h-3 w-3 text-slate-500 transition-transform"
+            :class="hudOpen && 'rotate-180'"
             fill="none"
             stroke="currentColor"
-            stroke-width="1.6"
+            stroke-width="2"
             stroke-linecap="round"
           >
-            <path d="M16.4 8.4A6.6 6.6 0 0 0 4.6 6.2" />
-            <path d="M3.6 11.6a6.6 6.6 0 0 0 11.8 2.2" />
-            <path d="M4.6 2.6v3.6h3.6M15.4 17.4v-3.6h-3.6" />
+            <path d="m5 7.5 5 5 5-5" />
           </svg>
-          自动旋转
-        </button>
-
-        <button
-          class="glass-panel rounded-xl px-3.5 py-2 text-[12px] font-medium text-slate-300 transition hover:text-white"
-          @click="resetView"
-        >
-          重置视角
-        </button>
-        <button
-          class="glass-panel flex items-center gap-2 rounded-xl px-3.5 py-2 text-[12px] font-medium text-slate-300 transition hover:text-white"
-          @click="goSettings"
-        >
-          <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z" />
-            <path
-              d="M16.2 12.2a1.3 1.3 0 0 0 .26 1.43l.05.05a1.6 1.6 0 1 1-2.26 2.26l-.05-.05a1.3 1.3 0 0 0-1.43-.26 1.3 1.3 0 0 0-.79 1.19v.13a1.6 1.6 0 1 1-3.2 0v-.07a1.3 1.3 0 0 0-.85-1.19 1.3 1.3 0 0 0-1.43.26l-.05.05A1.6 1.6 0 1 1 4.19 13.7l.05-.05a1.3 1.3 0 0 0 .26-1.43 1.3 1.3 0 0 0-1.19-.79h-.13a1.6 1.6 0 1 1 0-3.2h.07a1.3 1.3 0 0 0 1.19-.85 1.3 1.3 0 0 0-.26-1.43l-.05-.05A1.6 1.6 0 1 1 6.4 3.64l.05.05a1.3 1.3 0 0 0 1.43.26h.06a1.3 1.3 0 0 0 .79-1.19v-.13a1.6 1.6 0 1 1 3.2 0v.07a1.3 1.3 0 0 0 .79 1.19 1.3 1.3 0 0 0 1.43-.26l.05-.05a1.6 1.6 0 1 1 2.26 2.26l-.05.05a1.3 1.3 0 0 0-.26 1.43v.06a1.3 1.3 0 0 0 1.19.79h.13a1.6 1.6 0 1 1 0 3.2h-.07a1.3 1.3 0 0 0-1.19.79Z"
-            />
-          </svg>
-          设置
         </button>
       </div>
-    </header>
 
-    <!-- 左上 HUD -->
-    <div class="pointer-events-none absolute left-4 top-[86px] z-20">
-      <GameStatus
-        :attempts="store.remainingAttempts"
-        :attempts-per-game="store.attemptsPerGame"
-        :total-attempts="store.totalAttempts"
-        :success-count="store.successCount"
-        :remaining-items="remainingItems"
-        :rewards="store.rewardSummary"
-        :grabbing="store.isGrabbing"
-      />
+      <!-- 窄屏展开的完整战况 -->
+      <Transition name="hud">
+        <div v-if="hudOpen" class="pointer-events-auto max-h-[52vh] overflow-y-auto scroll-thin lg:hidden">
+          <GameStatus
+            :attempts="store.remainingAttempts"
+            :attempts-per-game="store.attemptsPerGame"
+            :total-attempts="store.totalAttempts"
+            :success-count="store.successCount"
+            :remaining-items="remainingItems"
+            :rewards="store.rewardSummary"
+            :grabbing="store.isGrabbing"
+          />
+        </div>
+      </Transition>
+
+      <!-- 宽屏：完整战况常驻 -->
+      <div class="pointer-events-none hidden lg:block">
+        <GameStatus
+          :attempts="store.remainingAttempts"
+          :attempts-per-game="store.attemptsPerGame"
+          :total-attempts="store.totalAttempts"
+          :success-count="store.successCount"
+          :remaining-items="remainingItems"
+          :rewards="store.rewardSummary"
+          :grabbing="store.isGrabbing"
+        />
+      </div>
+
+      <!-- 提示条：跟着顶部浮层往下排，永不压住标题或战况 -->
+      <Transition name="toast">
+        <div
+          v-if="warning"
+          class="pointer-events-auto mx-auto max-w-[420px] rounded-xl border border-amber-300/30 bg-amber-400/12 px-4 py-2.5 text-center text-[12px] leading-relaxed text-amber-200 backdrop-blur"
+        >
+          {{ warning }}
+        </div>
+      </Transition>
+
+      <Transition name="toast">
+        <div
+          v-if="bonus"
+          class="pointer-events-auto mx-auto max-w-[420px] rounded-xl border border-emerald-300/35 bg-emerald-400/12 px-4 py-2.5 text-center text-[12px] leading-relaxed text-emerald-200 backdrop-blur"
+        >
+          {{ bonus }}
+        </div>
+      </Transition>
+
+      <!-- 抓取成功：胜利横幅（非阻塞，烟花在 3D 场景里燃放） -->
+      <Transition name="banner">
+        <div v-if="successBanner" class="pointer-events-none flex justify-center">
+          <div
+            class="animate-pop-in flex items-center gap-3 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-amber-400/18 via-amber-300/12 to-amber-400/18 px-5 py-2.5 shadow-[0_0_36px_-8px_rgba(255,203,71,0.7)] backdrop-blur sm:px-6 sm:py-3"
+          >
+            <span class="text-[22px] leading-none sm:text-[26px]">🎉</span>
+            <div class="leading-tight">
+              <div class="neon-text text-[16px] font-bold text-arcade-gold sm:text-[18px]">抓取成功！</div>
+              <div class="mt-0.5 text-[12px] text-slate-200">
+                获得 <span class="font-semibold text-arcade-gold">{{ successBanner }}</span> 一枚
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 抓取失败：轻提示（不打断游戏） -->
+      <Transition name="toast">
+        <div
+          v-if="failNote"
+          class="pointer-events-auto mx-auto max-w-[420px] rounded-xl border border-slate-400/25 bg-slate-700/35 px-4 py-2.5 text-center text-[12px] leading-relaxed text-slate-200 backdrop-blur"
+        >
+          💨 {{ failNote }}
+        </div>
+      </Transition>
     </div>
 
-    <!-- 左下：360° 环视操作提示 -->
-    <div class="pointer-events-none absolute bottom-4 left-4 z-20 hidden lg:block">
+    <!-- 宽屏左下：360° 环视操作提示 -->
+    <div class="pointer-events-none absolute bottom-4 left-4 z-20 hidden xl:block">
       <div class="glass-panel flex items-center gap-3 rounded-xl px-3.5 py-2 text-[11px] text-slate-500">
         <span><span class="text-slate-300">拖动画面</span> 360° 环视</span>
         <span class="text-slate-700">·</span>
@@ -324,7 +484,7 @@ function onKeydownRefill(e: KeyboardEvent) {
       </div>
     </div>
 
-    <!-- 右下提示 -->
+    <!-- 宽屏右下：坐标 / 取物口 / 补充次数 -->
     <div class="pointer-events-none absolute bottom-4 right-4 z-20 hidden xl:block">
       <div class="glass-panel rounded-xl px-3.5 py-2.5 text-right">
         <div class="tabular text-[11px] text-slate-500">
@@ -353,8 +513,29 @@ function onKeydownRefill(e: KeyboardEvent) {
       </div>
     </div>
 
-    <!-- 底部操作面板 -->
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-4">
+    <!-- 底部：次级操作 + 操作面板（窄屏把「取物口 / 补充次数」也搬到这里，拇指够得到） -->
+    <div
+      class="pointer-events-none absolute inset-x-0 bottom-0 z-20 mx-auto flex w-full max-w-[720px] flex-col items-center gap-2 px-3 pb-safe sm:px-4 xl:gap-0"
+    >
+      <div class="pointer-events-auto flex w-full items-center justify-end gap-2 xl:hidden">
+        <button
+          class="glass-panel flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition active:scale-[0.97]"
+          :class="chuteCount > 0 ? 'text-cyan-200' : 'cursor-not-allowed text-slate-500'"
+          :disabled="chuteCount <= 0 || store.isGrabbing"
+          :title="chuteCount > 0 ? '取走取物腔里的全部奖品' : '取物口还没有奖品'"
+          @click="clearChute"
+        >
+          🧺 取物口<span v-if="chuteCount > 0" class="tabular">（{{ chuteCount }}）</span>
+        </button>
+        <button
+          v-if="!canContinue"
+          class="flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-300 to-amber-400 px-3.5 text-[12px] font-semibold text-amber-950 shadow-[0_0_20px_-6px_rgba(255,203,71,0.9)] transition active:scale-[0.97]"
+          @click="refill"
+        >
+          ＋ 补充次数
+        </button>
+      </div>
+
       <GameController
         :disabled="!canContinue"
         :grabbing="store.isGrabbing"
@@ -364,56 +545,6 @@ function onKeydownRefill(e: KeyboardEvent) {
         @grab="handleGrab"
       />
     </div>
-
-    <!-- 提示条 -->
-    <Transition name="toast">
-      <div
-        v-if="warning"
-        class="pointer-events-auto absolute left-1/2 top-[86px] z-30 max-w-[420px] -translate-x-1/2 rounded-xl border border-amber-300/30 bg-amber-400/12 px-4 py-2.5 text-[12px] leading-relaxed text-amber-200 backdrop-blur"
-      >
-        {{ warning }}
-      </div>
-    </Transition>
-
-    <!-- 意外收获提示 -->
-    <Transition name="toast">
-      <div
-        v-if="bonus"
-        class="pointer-events-auto absolute left-1/2 top-[86px] z-30 max-w-[420px] -translate-x-1/2 rounded-xl border border-emerald-300/35 bg-emerald-400/12 px-4 py-2.5 text-[12px] leading-relaxed text-emerald-200 backdrop-blur"
-      >
-        {{ bonus }}
-      </div>
-    </Transition>
-
-    <!-- 抓取成功：胜利横幅（非阻塞，烟花在 3D 场景里燃放） -->
-    <Transition name="banner">
-      <div
-        v-if="successBanner"
-        class="pointer-events-none absolute inset-x-0 top-[86px] z-30 flex justify-center"
-      >
-        <div
-          class="animate-pop-in flex items-center gap-3 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-amber-400/18 via-amber-300/12 to-amber-400/18 px-6 py-3 shadow-[0_0_36px_-8px_rgba(255,203,71,0.7)] backdrop-blur"
-        >
-          <span class="text-[26px] leading-none">🎉</span>
-          <div class="leading-tight">
-            <div class="neon-text text-[18px] font-bold text-arcade-gold">抓取成功！</div>
-            <div class="mt-0.5 text-[12px] text-slate-200">
-              获得 <span class="font-semibold text-arcade-gold">{{ successBanner }}</span> 一枚
-            </div>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- 抓取失败：轻提示（不打断游戏） -->
-    <Transition name="toast">
-      <div
-        v-if="failNote"
-        class="pointer-events-auto absolute left-1/2 top-[86px] z-30 max-w-[420px] -translate-x-1/2 rounded-xl border border-slate-400/25 bg-slate-700/35 px-4 py-2.5 text-[12px] leading-relaxed text-slate-200 backdrop-blur"
-      >
-        💨 {{ failNote }}
-      </div>
-    </Transition>
 
     <!-- 加载 -->
     <Transition name="toast">
@@ -449,6 +580,37 @@ function onKeydownRefill(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+/* 顶栏按钮：手机上只有图标，落到 36px 的方形点击区；宽屏长回文字按钮 */
+.hud-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.625rem;
+  border-radius: 0.75rem;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(203 213 225);
+  transition:
+    transform 0.08s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.hud-btn:active {
+  transform: scale(0.94);
+}
+
+@media (min-width: 1024px) {
+  .hud-btn {
+    height: auto;
+    min-width: 0;
+    padding: 0.5rem 0.875rem;
+  }
+}
+
 .toast-enter-active,
 .toast-leave-active {
   transition:
@@ -458,7 +620,7 @@ function onKeydownRefill(e: KeyboardEvent) {
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translate(-50%, -8px);
+  transform: translateY(-8px);
 }
 
 .banner-enter-active,
@@ -471,5 +633,18 @@ function onKeydownRefill(e: KeyboardEvent) {
 .banner-leave-to {
   opacity: 0;
   transform: translateY(-14px);
+}
+
+/* 战况卡展开：从上方轻轻落下，而不是硬邦邦地出现 */
+.hud-enter-active,
+.hud-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hud-enter-from,
+.hud-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
 }
 </style>

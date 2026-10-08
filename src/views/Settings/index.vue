@@ -163,7 +163,7 @@ function goGame() {
   <div class="min-h-full bg-slate-50">
     <!-- 顶栏 -->
     <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div class="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-6 py-3.5">
+      <div class="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
         <div class="flex items-center gap-3">
           <div
             class="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-sky-500 text-[16px] shadow-sm"
@@ -176,16 +176,16 @@ function goGame() {
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
-          <span class="mr-1 hidden text-[11px] text-slate-400 sm:inline">修改会自动保存到浏览器本地</span>
+        <div class="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+          <span class="hidden text-[11px] text-slate-400 lg:inline">修改会自动保存到浏览器本地</span>
           <button
-            class="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-[12.5px] font-medium text-slate-700 transition hover:bg-slate-50"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] font-medium text-slate-700 transition hover:bg-slate-50 sm:px-3.5"
             @click="askReset"
           >
             恢复默认设置
           </button>
           <button
-            class="rounded-lg bg-blue-600 px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            class="rounded-lg bg-blue-600 px-3 py-2 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-3.5"
             @click="goGame"
           >
             进入游戏
@@ -194,9 +194,9 @@ function goGame() {
       </div>
     </header>
 
-    <main class="mx-auto max-w-[1440px] px-6 py-6">
+    <main class="pb-safe-lg mx-auto max-w-[1440px] px-4 pt-5 sm:px-6 sm:pt-6">
       <!-- 统计 -->
-      <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section class="mb-5 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
         <div class="rounded-2xl border border-slate-200 bg-white p-4">
           <div class="text-[11.5px] text-slate-500">物品种类</div>
           <div class="tabular mt-1 text-2xl font-semibold text-slate-900">{{ items.length }}</div>
@@ -252,7 +252,7 @@ function goGame() {
 
       <!-- 工具栏 -->
       <section class="mb-4 flex flex-wrap items-center gap-2.5">
-        <div class="relative">
+        <div class="relative w-full sm:w-auto">
           <svg
             viewBox="0 0 20 20"
             class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -267,13 +267,13 @@ function goGame() {
             v-model="search"
             type="text"
             placeholder="搜索物品名称"
-            class="w-56 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-[12.5px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+            class="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-[12.5px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 sm:w-56"
           />
         </div>
 
         <select
           v-model="difficultyFilter"
-          class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500"
+          class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500 sm:flex-none"
         >
           <option value="all">全部难度</option>
           <option value="easy">简单</option>
@@ -283,7 +283,7 @@ function goGame() {
 
         <select
           v-model="statusFilter"
-          class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500"
+          class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500 sm:flex-none"
         >
           <option value="all">全部状态</option>
           <option value="enabled">仅已启用</option>
@@ -292,7 +292,7 @@ function goGame() {
 
         <select
           v-model="sortBy"
-          class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500"
+          class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-700 outline-none focus:border-blue-500 sm:flex-none"
         >
           <option value="default">默认顺序</option>
           <option value="quantity">按数量</option>
@@ -300,7 +300,7 @@ function goGame() {
           <option value="name">按名称</option>
         </select>
 
-        <div class="ml-auto flex items-center gap-2">
+        <div class="flex w-full items-center justify-between gap-2 sm:ml-auto sm:w-auto sm:justify-end">
           <span class="tabular text-[12px] text-slate-500">共 {{ visibleItems.length }} / {{ items.length }} 项</span>
           <button
             class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
@@ -383,7 +383,7 @@ function goGame() {
     <Transition name="fade">
       <div
         v-if="toast"
-        class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-[12.5px] font-medium text-white shadow-lg"
+        class="bottom-safe fixed left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-[12.5px] font-medium text-white shadow-lg"
       >
         {{ toast }}
       </div>

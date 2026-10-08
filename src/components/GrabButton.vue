@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useIsTouch } from '@/utils/device'
+
 const props = defineProps<{
   disabled?: boolean
   grabbing?: boolean
@@ -6,6 +9,21 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: 'grab'): void }>()
+
+/** 触屏上把「按空格」换成「轻触」，文案跟着操作方式走 */
+const touch = useIsTouch()
+
+const subLabel = computed(() => {
+  if (props.grabbing) return 'PLEASE WAIT'
+  if (props.disabled) return 'NO ATTEMPT LEFT'
+  return touch.value ? 'TAP TO GRAB' : 'PRESS SPACE'
+})
+
+const hint = computed(() => {
+  if (props.disabled) return '次数已用完'
+  if (props.grabbing) return '机械爪动作中'
+  return touch.value ? '对准物品后轻触' : '对准物品后按下'
+})
 
 function onClick() {
   if (props.disabled || props.grabbing) return
@@ -20,19 +38,18 @@ function onClick() {
       class="grab-btn"
       :class="grabbing ? 'grab-btn-busy' : disabled ? 'grab-btn-off' : 'grab-btn-ready'"
       :disabled="disabled || grabbing"
+      :aria-label="grabbing ? '抓取中' : '抓取'"
       @click="onClick"
     >
       <span class="relative z-10 flex flex-col items-center leading-none">
-        <span class="text-[22px] font-bold tracking-[0.22em]">{{ grabbing ? '抓取中' : '抓 取' }}</span>
-        <span class="mt-1 text-[10px] font-medium tracking-[0.16em] opacity-70">
-          {{ grabbing ? 'PLEASE WAIT' : 'PRESS SPACE' }}
+        <span class="grab-title text-[22px] font-bold tracking-[0.22em]">
+          {{ grabbing ? '抓取中' : '抓 取' }}
         </span>
+        <span class="mt-1 text-[10px] font-medium tracking-[0.16em] opacity-70">{{ subLabel }}</span>
       </span>
       <span class="grab-ring"></span>
     </button>
-    <span class="text-[10px] tracking-[0.18em] text-slate-500">
-      {{ disabled ? '次数已用完' : grabbing ? '机械爪动作中' : '对准物品后按下' }}
-    </span>
+    <span class="text-[10px] tracking-[0.18em] text-slate-500">{{ hint }}</span>
   </div>
 </template>
 
@@ -47,6 +64,10 @@ function onClick() {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* 触屏：干掉双击缩放与长按选中，按下即时响应 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
     transform 0.1s ease,
     box-shadow 0.2s ease,
@@ -64,12 +85,14 @@ function onClick() {
     inset 0 -6px 18px rgba(120, 0, 40, 0.35);
 }
 
-.grab-btn-ready:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow:
-    0 0 0 8px rgba(255, 77, 141, 0.18),
-    0 0 46px rgba(255, 77, 141, 0.7),
-    inset 0 -6px 18px rgba(120, 0, 40, 0.35);
+@media (hover: hover) and (pointer: fine) {
+  .grab-btn-ready:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow:
+      0 0 0 8px rgba(255, 77, 141, 0.18),
+      0 0 46px rgba(255, 77, 141, 0.7),
+      inset 0 -6px 18px rgba(120, 0, 40, 0.35);
+  }
 }
 
 .grab-btn-ready:active {
@@ -107,6 +130,26 @@ function onClick() {
 @keyframes ring-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/*
+ * 小屏 / 矮屏收起尺寸：手机上一个 132px 的圆钮会占掉太多画面，
+ * 但依然保留 104px（拇指轻松覆盖，远大于 44px 的可点最小尺寸）。
+ */
+@media (max-width: 639px), (max-height: 560px) {
+  .grab-btn {
+    width: 104px;
+    height: 104px;
+  }
+
+  .grab-title {
+    font-size: 18px;
+    letter-spacing: 0.16em;
+  }
+
+  .grab-ring {
+    inset: 8px;
   }
 }
 </style>

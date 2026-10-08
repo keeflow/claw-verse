@@ -20,8 +20,12 @@ const controlDisabled = computed(() => props.disabled || props.grabbing)
 </script>
 
 <template>
+  <!--
+    移动端：整条面板撑满宽度，摇杆贴左下、抓取键贴右下，都在拇指自然覆盖范围内；
+    桌面端恢复「方向键 + 摇杆 | 抓取 | 快捷键说明」的横向排布。
+  -->
   <div
-    class="glass-panel pointer-events-auto flex flex-wrap items-end justify-between gap-5 rounded-2xl px-6 py-4"
+    class="glass-panel pointer-events-auto flex w-full flex-wrap items-end justify-between gap-3 rounded-2xl px-3 py-3 sm:px-5 sm:py-4 lg:w-auto lg:gap-5 lg:px-6"
   >
     <DirectionController
       :disabled="controlDisabled"
@@ -30,7 +34,7 @@ const controlDisabled = computed(() => props.disabled || props.grabbing)
     />
 
     <div class="flex flex-col items-center gap-2 px-1">
-      <div class="flex items-center gap-3 text-[10px] tracking-wider text-slate-500">
+      <div class="hidden items-center gap-3 text-[10px] tracking-wider text-slate-500 lg:flex">
         <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>
         <span class="text-slate-600">/</span>
         <span class="kbd">↑</span><span class="kbd">←</span><span class="kbd">↓</span><span class="kbd">→</span>

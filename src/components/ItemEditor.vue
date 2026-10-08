@@ -169,9 +169,13 @@ function clampNum(
       <aside
         v-if="open"
         class="fixed right-0 top-0 z-50 flex h-full w-full max-w-[520px] flex-col bg-white shadow-[-24px_0_60px_-24px_rgba(16,24,40,0.28)]"
+        :style="{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }"
       >
         <!-- 头部 -->
-        <header class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+        <header class="flex items-center justify-between border-b border-slate-200 px-4 py-4 sm:px-6">
           <div class="flex items-center gap-3">
             <div class="flex h-11 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
               <img :src="preview" class="h-9 w-8 object-contain" alt="" />
@@ -184,7 +188,7 @@ function clampNum(
             </div>
           </div>
           <button
-            class="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="关闭"
             @click="close"
           >
@@ -195,7 +199,7 @@ function clampNum(
         </header>
 
         <!-- 表单 -->
-        <div class="scroll-thin flex-1 overflow-y-auto px-6 py-5">
+        <div class="scroll-thin flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <!-- 基础信息 -->
           <section class="mb-6">
             <h3 class="section-title">基础信息</h3>
@@ -453,19 +457,21 @@ function clampNum(
         </div>
 
         <!-- 底部 -->
-        <footer class="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <p class="text-[11px] text-slate-500">
+        <footer
+          class="flex flex-col-reverse items-stretch gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+        >
+          <p class="hidden text-[11px] text-slate-500 sm:block">
             保存后会写入浏览器本地存储，重新进入游戏立即生效
           </p>
           <div class="flex flex-none gap-2.5">
             <button
-              class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-[13px] font-medium text-slate-700 transition hover:bg-slate-100"
+              class="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-medium text-slate-700 transition hover:bg-slate-100 sm:flex-none sm:py-2"
               @click="close"
             >
               取消
             </button>
             <button
-              class="rounded-lg bg-blue-600 px-5 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              class="flex-1 rounded-lg bg-blue-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:flex-none sm:py-2"
               @click="submit"
             >
               保存

@@ -139,8 +139,9 @@ const barColor = computed(() => itemColor(props.item))
 
       <div class="flex items-center gap-1">
         <button
-          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           title="复制"
+          aria-label="复制"
           @click="emit('duplicate')"
         >
           <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -149,8 +150,9 @@ const barColor = computed(() => itemColor(props.item))
           </svg>
         </button>
         <button
-          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
           title="编辑"
+          aria-label="编辑"
           @click="emit('edit')"
         >
           <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -158,8 +160,9 @@ const barColor = computed(() => itemColor(props.item))
           </svg>
         </button>
         <button
-          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
           title="删除"
+          aria-label="删除"
           @click="emit('remove')"
         >
           <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">

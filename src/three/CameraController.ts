@@ -63,6 +63,25 @@ interface ViewTween extends SphericalView {
 const _v = new THREE.Vector3()
 const _sph = new THREE.Spherical()
 
+/** 默认机位（不加屏幕比例缩放的那一份「标准距离」）的球坐标 */
+const HOME_VIEW: SphericalView = (() => {
+  const s = new THREE.Spherical().setFromVector3(_v.copy(DEFAULT_POSITION).sub(DEFAULT_TARGET))
+  return { azimuth: s.theta, polar: s.phi, radius: s.radius }
+})()
+
+/**
+ * 按屏幕宽高比给出机位缩放系数。
+ *
+ * 竖直视角固定 42°，宽高比越小水平视角就越窄 —— 竖屏手机上机台两侧
+ * 会被裁掉。这里把机位整体拉远一点补偿：宽高比 ≥ 1 不动，竖屏最多拉远 35%，
+ * 保证娃娃机（含灯箱）在任何手机上都能完整入镜。
+ */
+export function distanceScaleForAspect(aspect: number): number {
+  if (!Number.isFinite(aspect) || aspect <= 0) return 1
+  if (aspect >= 1) return 1
+  return Math.min(1.35, 1 + (1 - aspect) * 0.35)
+}
+
 /** 把角度收敛到 (-π, π]，用于取最短旋转路径 */
 export function wrapAngle(a: number): number {
   return THREE.MathUtils.euclideanModulo(a + Math.PI, Math.PI * 2) - Math.PI
@@ -103,7 +122,9 @@ export class CameraController {
   private autoRotateWanted = false
   /** 外部主动禁用（例如弹出结果弹窗时锁住视角） */
   private userEnabled = true
-  private readonly home: SphericalView
+  /** 当前屏幕比例对应的机位缩放（竖屏拉远，见 distanceScaleForAspect） */
+  private distanceScale = 1
+  private readonly home: SphericalView = HOME_VIEW
   private readonly onAutoRotateChange?: (on: boolean) => void
   private readonly domElement: HTMLElement
   private readonly handlePointerDown = () => {
@@ -127,19 +148,29 @@ export class CameraController {
     this.controls.target.copy(DEFAULT_TARGET)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.09
-    this.controls.rotateSpeed = 0.45
-    this.controls.zoomSpeed = 0.7
+    // 触屏上手指的行程比鼠标短得多，同样转 30° 要滑更长的距离 —— 提一点灵敏度
+    const coarsePointer =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches
+    this.controls.rotateSpeed = coarsePointer ? 0.62 : 0.45
+    this.controls.zoomSpeed = coarsePointer ? 0.85 : 0.7
     this.controls.zoomToCursor = false
     this.controls.enablePan = false
-    this.controls.minDistance = VIEW_LIMITS.minDistance
-    this.controls.maxDistance = VIEW_LIMITS.maxDistance
     this.controls.minPolarAngle = VIEW_LIMITS.minPolar
     this.controls.maxPolarAngle = VIEW_LIMITS.maxPolar
     // 不设置 min/maxAzimuthAngle：方位角完全放开，可绕机器一圈查看
     this.controls.autoRotateSpeed = 0.9
-    this.controls.update()
 
-    this.home = this.readSpherical()
+    // 竖屏 / 窄屏：机位与距离限位一起按比例放大，整台机器才不会被裁掉
+    this.distanceScale = distanceScaleForAspect(aspect)
+    this.applyDistanceLimits()
+    if (this.distanceScale !== 1) {
+      // 只改半径不改方向：初始机位沿原视线方向后退
+      this.camera.position.sub(this.controls.target).multiplyScalar(this.distanceScale).add(this.controls.target)
+    }
+
+    this.controls.update()
 
     // 滚轮缩放同样视为用户接管，取消正在进行的转场
     this.controls.addEventListener('start', () => this.stopTween())
@@ -155,13 +186,15 @@ export class CameraController {
     const cur = this.readSpherical()
     // 走最短路径：从当前方位角出发的等价角
     const toAzimuth = cur.azimuth + wrapAngle(azimuth - cur.azimuth)
+    // 传入的 distance 是「标准距离」，要乘上当前屏幕比例的缩放，竖屏同样能看全机器
+    const radius = distance !== undefined ? distance * this.distanceScale : cur.radius
     this.startTween({
       fromAzimuth: cur.azimuth,
       fromPolar: cur.polar,
       fromRadius: cur.radius,
       azimuth: toAzimuth,
       polar: clamp(polar ?? cur.polar, VIEW_LIMITS.minPolar, VIEW_LIMITS.maxPolar),
-      radius: clamp(distance ?? cur.radius, VIEW_LIMITS.minDistance, VIEW_LIMITS.maxDistance),
+      radius: clamp(radius, this.controls.minDistance, this.controls.maxDistance),
       elapsed: 0,
       duration: Math.max(0.1, duration),
     })
@@ -221,7 +254,12 @@ export class CameraController {
   }
 
   get isDefaultView(): boolean {
-    return this.camera.position.distanceTo(DEFAULT_POSITION) < 0.05
+    const cur = this.readSpherical()
+    return (
+      Math.abs(cur.radius - this.home.radius * this.distanceScale) < 0.05 &&
+      Math.abs(wrapAngle(cur.azimuth - this.home.azimuth)) < 0.03 &&
+      Math.abs(cur.polar - this.home.polar) < 0.03
+    )
   }
 
   // ------------------------------------------------------------------
@@ -249,6 +287,8 @@ export class CameraController {
     if (height <= 0) return
     this.camera.aspect = width / height
     this.camera.updateProjectionMatrix()
+    // 旋转手机 / 拖动窗口都会走到这里：机位跟着屏幕比例重新配平
+    this.applyDistanceScale(distanceScaleForAspect(this.camera.aspect))
   }
 
   dispose(): void {
@@ -260,6 +300,36 @@ export class CameraController {
   // ------------------------------------------------------------------
   // 内部
   // ------------------------------------------------------------------
+
+  private applyDistanceLimits(): void {
+    this.controls.minDistance = VIEW_LIMITS.minDistance * this.distanceScale
+    this.controls.maxDistance = VIEW_LIMITS.maxDistance * this.distanceScale
+  }
+
+  /** 屏幕比例变化时同步缩放机位，画面不会突然贴脸或被拉飞 */
+  private applyDistanceScale(next: number): void {
+    if (Math.abs(next - this.distanceScale) < 0.005) return
+    const ratio = next / this.distanceScale
+    this.distanceScale = next
+    this.applyDistanceLimits()
+
+    if (this.tween) {
+      // 转场途中旋转手机：起点与终点一起缩放，弧线不会断
+      this.tween.fromRadius = clamp(
+        this.tween.fromRadius * ratio,
+        this.controls.minDistance,
+        this.controls.maxDistance,
+      )
+      this.tween.radius = clamp(this.tween.radius * ratio, this.controls.minDistance, this.controls.maxDistance)
+      return
+    }
+
+    const cur = this.readSpherical()
+    const radius = clamp(cur.radius * ratio, this.controls.minDistance, this.controls.maxDistance)
+    this.camera.position
+      .copy(this.controls.target)
+      .add(_v.setFromSpherical(_sph.set(radius, cur.polar, cur.azimuth)))
+  }
 
   private startTween(t: ViewTween): void {
     this.tween = t
